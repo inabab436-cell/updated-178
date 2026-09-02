@@ -6,6 +6,7 @@
  * truth and no separate tracking system.
  */
 import { BadgeCheck, CheckCircle2, Circle, Clock, Package, PackageCheck, Truck, XCircle } from "lucide-react";
+import { orderPaymentState } from "@/lib/payment-policy";
 
 import type { CustomerOrderDetail } from "@/lib/customer-orders.functions";
 
@@ -29,7 +30,9 @@ function fmt(iso: string | null): string {
 
 export function buildTimeline(order: CustomerOrderDetail): TimelineStep[] {
   const cancelled = order.status === "cancelled";
-  const paid = order.payment_status !== "pending";
+  const payState = orderPaymentState(order);
+  const cod = payState === "on_delivery";
+  const paid = payState === "paid";
   const prepared = Boolean(order.prepared_at) || ["prepared", "shipped", "delivered"].includes(order.status);
   const shipped = Boolean(order.shipped_at) || ["shipped", "delivered"].includes(order.status);
   const delivered = Boolean(order.delivered_at) || order.status === "delivered";
@@ -38,8 +41,8 @@ export function buildTimeline(order: CustomerOrderDetail): TimelineStep[] {
     { key: "created", label: "تم إنشاء الأوردر", at: order.created_at, done: true, icon: CheckCircle2 },
     {
       key: "paid",
-      label: paid ? "تم تأكيد الدفع" : "بانتظار إتمام الدفع",
-      at: order.payment_confirmed_at,
+      label: cod ? "الدفع عند الاستلام" : paid ? "تم تأكيد الدفع" : "بانتظار إتمام الدفع",
+      at: cod ? null : order.payment_confirmed_at,
       done: paid,
       icon: paid ? BadgeCheck : Clock,
     },
