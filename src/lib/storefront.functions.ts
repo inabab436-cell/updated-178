@@ -412,6 +412,17 @@ export const createStorefrontOrder = createServerFn({ method: "POST" })
       } catch { /* non-fatal */ }
     }
 
+    // Remember the KIND of the chosen method on the order: a cash-on-delivery
+    // order is registered, but NOT paid, and must never be shown as paid.
+    try {
+      await admin
+        .from("orders")
+        .update({ payment_kind: chosenMethod?.payment_kind ?? null })
+        .eq("order_number", orderNumber);
+    } catch {
+      /* payment_kind column not present yet */
+    }
+
     const confirmationMessage = buildPaymentConfirmationMessage(chosenMethod, {
       deliveryEta: shippingRow?.eta ?? null,
       orderNumber,

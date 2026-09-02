@@ -3681,7 +3681,7 @@ export const Route = createFileRoute("/api/chat-ai")({
             const paymentGuidance = chosenMethod
               ? [
                   `Chosen payment method: ${chosenMethod.name}.`,
-                  ...paymentPolicyForAgent(chosenMethod, orderCurrency),
+                  ...paymentPolicyForAgent(chosenMethod, orderCurrency || undefined),
                   chosenMethod.instructions
                     ? `Follow ONLY these instructions: ${chosenMethod.instructions}`
                     : "",
