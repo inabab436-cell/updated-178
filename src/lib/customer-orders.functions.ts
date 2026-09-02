@@ -21,6 +21,7 @@ export interface CustomerOrderDetail {
   order_number: string | null;
   status: string;
   payment_status: string;
+  payment_kind: string | null;
   payment_method: string | null;
   total_price: number | null;
   currency: string | null;
@@ -90,7 +91,7 @@ export const listCustomerOrdersDetailed = createServerFn({ method: "GET" }).hand
     const { data, error } = await admin
       .from("orders")
       .select(
-        "id, order_number, status, payment_status, payment_method, total_price, items, notes, created_at, prepared_at, shipped_at, delivered_at, payment_confirmed_at, conversation_id",
+        "id, order_number, status, payment_status, payment_kind, payment_method, total_price, items, notes, created_at, prepared_at, shipped_at, delivered_at, payment_confirmed_at, conversation_id",
       )
       .eq("customer_id", s.customerId)
       .eq("merchant_id", s.merchantId)
@@ -115,6 +116,7 @@ export const listCustomerOrdersDetailed = createServerFn({ method: "GET" }).hand
         order_number: (o.order_number as string | null) ?? null,
         status: String(o.status ?? "new"),
         payment_status: String(o.payment_status ?? "confirmed"),
+        payment_kind: (o.payment_kind as string | null) ?? null,
         payment_method: (o.payment_method as string | null) ?? null,
         total_price: o.total_price == null ? null : Number(o.total_price),
         currency,

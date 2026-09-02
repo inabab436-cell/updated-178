@@ -43,6 +43,8 @@ export interface OrderRow {
   payment_method: string | null;
   /** 'pending' = manual payment not confirmed yet → no stock deducted. */
   payment_status: string;
+  /** 'on_delivery' → cash on delivery: nothing paid until handover. */
+  payment_kind: string | null;
   payment_confirmed_at: string | null;
   /** Final value of the CONFIRMED (paid) part: products − discount + shipping. */
   total_price: number | null;
@@ -93,6 +95,7 @@ export const listOrders = createServerFn({ method: "GET" }).handler(
       ...r,
       items: Array.isArray(r.items) ? r.items : [],
       payment_status: r.payment_status ?? "confirmed",
+      payment_kind: r.payment_kind ?? null,
       total_price: r.total_price ?? null,
       subtotal_price: r.subtotal_price ?? null,
       discount_amount: r.discount_amount ?? null,

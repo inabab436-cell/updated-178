@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { ORDER_PAYMENT_STATE_LABEL_AR, orderPaymentState } from "@/lib/payment-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -263,11 +264,13 @@ function OrdersPage() {
                               className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
                                 o.payment_status === "pending"
                                   ? "bg-amber-100 text-amber-800"
-                                  : "bg-emerald-100 text-emerald-800"
+                                  : orderPaymentState(o) === "on_delivery"
+                                    ? "bg-sky-100 text-sky-800"
+                                    : "bg-emerald-100 text-emerald-800"
                               }`}
                               title={o.payment_method ?? ""}
                             >
-                              {o.payment_status === "pending" ? "بانتظار الدفع" : "مدفوع"}
+                              {ORDER_PAYMENT_STATE_LABEL_AR[orderPaymentState(o)]}
                             </span>
                             {hasPendingAddition(o) && (
                               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">

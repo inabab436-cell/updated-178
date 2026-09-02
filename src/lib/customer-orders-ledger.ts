@@ -20,6 +20,7 @@
  * or may ever be discussed.
  */
 import { matchShippingZone, type ShippingZone } from "@/lib/order-input-validation";
+import { orderPaymentState } from "@/lib/payment-policy";
 
 export interface LedgerItem {
   product_name?: string | null;
@@ -37,6 +38,7 @@ export interface LedgerOrderRow {
   order_number?: string | null;
   status?: string | null;
   payment_status?: string | null;
+  payment_kind?: string | null;
   payment_method?: string | null;
   payment_confirmed_at?: string | null;
   created_at?: string | null;
@@ -160,7 +162,8 @@ export function buildCustomerOrdersLedger(
   const blocks = list.map((row, i) => {
     const number = clean(row.order_number) || `(no number, order #${i + 1})`;
     const status = clean(row.status) || "new";
-    const paid = String(row.payment_status ?? "confirmed") !== "pending";
+    const payState = orderPaymentState(row);
+    const paid = payState === "paid";
     const lines: string[] = [
       `ORDER ${i + 1} — Order Number: ${number}`,
       `  - current status (as last updated by the brand owner): ${STATUS_LABEL[status] ?? status}`,
@@ -174,7 +177,11 @@ export function buildCustomerOrdersLedger(
     if (delivered) lines.push(`  - delivered at: ${delivered}`);
     lines.push(
       `  - payment method: ${clean(row.payment_method) || "not recorded"} | payment: ${
-        paid ? "CONFIRMED (paid — the store team confirmed it)" : "PENDING (not confirmed yet)"
+        paid
+          ? "CONFIRMED (paid — the store team confirmed it)"
+          : payState === "on_delivery"
+            ? "CASH ON DELIVERY (NOT paid — the customer pays when the order is delivered; never call it paid)"
+            : "PENDING (not confirmed yet)"
       }` +
         (paid && stampWithAge(row.payment_confirmed_at, nowIso)
           ? ` | confirmed at: ${stampWithAge(row.payment_confirmed_at, nowIso)}`

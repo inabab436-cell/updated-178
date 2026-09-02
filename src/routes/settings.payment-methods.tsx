@@ -34,6 +34,11 @@ import {
   type PaymentDetailType,
   type PaymentMethod,
 } from "@/lib/payment-methods.functions";
+import {
+  paymentPolicySummary,
+  type PartialPaymentType,
+  type PaymentKind,
+} from "@/lib/payment-policy";
 
 export const Route = createFileRoute("/settings/payment-methods")({
   head: () => ({
@@ -112,6 +117,11 @@ interface FormState {
   detailValue: string;
   instructions: string;
   paymentTemplate: string;
+  paymentKind: PaymentKind;
+  allowFull: boolean;
+  allowPartial: boolean;
+  partialType: PartialPaymentType;
+  partialValue: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -121,7 +131,25 @@ const EMPTY_FORM: FormState = {
   detailValue: "",
   instructions: "",
   paymentTemplate: "",
+  paymentKind: "online",
+  allowFull: true,
+  allowPartial: false,
+  partialType: "percent",
+  partialValue: "",
 };
+
+const KIND_CARDS: Array<{ value: PaymentKind; title: string; desc: string }> = [
+  {
+    value: "online",
+    title: "دفع أونلاين",
+    desc: "إنستا باي، المحافظ الإلكترونية، التحويلات. تحدد أدناه هل الدفع كلي أو جزئي.",
+  },
+  {
+    value: "on_delivery",
+    title: "الدفع عند الاستلام",
+    desc: "العميل يدفع عند تسلّم الطلب. لا يُعتبر الطلب مدفوعاً ولا يتحدث الوكيل عنه كأنه مدفوع.",
+  },
+];
 
 function PaymentMethodsPage() {
   const qc = useQueryClient();
@@ -169,6 +197,11 @@ function PaymentMethodsPage() {
       detailValue: m.detail_value ?? "",
       instructions: m.instructions ?? "",
       paymentTemplate: m.payment_template ?? "",
+      paymentKind: m.payment_kind ?? "online",
+      allowFull: m.allow_full_payment ?? true,
+      allowPartial: Boolean(m.allow_partial_payment),
+      partialType: m.partial_payment_type ?? "percent",
+      partialValue: m.partial_payment_value ? String(m.partial_payment_value) : "",
     });
     setOpen(true);
   };
@@ -182,6 +215,11 @@ function PaymentMethodsPage() {
         detail_value: form.detailValue.trim(),
         instructions: form.instructions.trim(),
         payment_template: form.paymentTemplate.trim(),
+        payment_kind: form.paymentKind,
+        allow_full_payment: form.paymentKind === "on_delivery" ? true : form.allowFull,
+        allow_partial_payment: form.paymentKind === "on_delivery" ? false : form.allowPartial,
+        partial_payment_type: form.partialType,
+        partial_payment_value: Number(form.partialValue) || 0,
       };
       if (editingId) {
         return updatePaymentMethod({ data: { id: editingId, ...payload } });
@@ -277,6 +315,9 @@ function PaymentMethodsPage() {
                   <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                     {behaviorHint(m.behavior)}
                   </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {paymentPolicySummary(m)}
+                  </p>
                   {m.detail_type !== "none" && m.detail_value ? (
                     <p className="mt-1 text-xs text-muted-foreground">
                       {DETAIL_LABELS[m.detail_type]}: {m.detail_value}
@@ -352,6 +393,93 @@ function PaymentMethodsPage() {
             </div>
 
             <div className="space-y-2">
+              <Label>نوع الدفع</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {KIND_CARDS.map((c) => {
+                  const active = form.paymentKind === c.value;
+                  return (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => set("paymentKind", c.value)}
+                      aria-pressed={active}
+                      className={`rounded-xl border p-3 text-right transition ${
+                        active
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-border/60 hover:bg-muted/40"
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">{c.title}</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                        {c.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {form.paymentKind === "online" && (
+              <div className="space-y-3 rounded-xl border border-border/60 p-3">
+                <Label>سياسة الدفع (يلتزم بها الوكيل حرفياً)</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm">السماح بالدفع الكلي</span>
+                  <Switch
+                    checked={form.allowFull}
+                    onCheckedChange={(v) => set("allowFull", !!v)}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm">السماح بالدفع الجزئي</span>
+                  <Switch
+                    checked={form.allowPartial}
+                    onCheckedChange={(v) => set("allowPartial", !!v)}
+                  />
+                </div>
+                {form.allowPartial && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="pm-partial-type" className="text-xs">نوع المبلغ الجزئي</Label>
+                      <Select
+                        value={form.partialType}
+                        onValueChange={(v) => set("partialType", v as PartialPaymentType)}
+                      >
+                        <SelectTrigger id="pm-partial-type" dir="rtl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent dir="rtl">
+                          <SelectItem value="percent">نسبة مئوية من الإجمالي</SelectItem>
+                          <SelectItem value="amount">مبلغ ثابت</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="pm-partial-value" className="text-xs">
+                        {form.partialType === "percent" ? "النسبة المطلوبة (%)" : "المبلغ المطلوب"}
+                      </Label>
+                      <Input
+                        id="pm-partial-value"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={form.partialType === "percent" ? 100 : undefined}
+                        value={form.partialValue}
+                        onChange={(e) => set("partialValue", e.target.value)}
+                        placeholder={form.partialType === "percent" ? "مثال: 50" : "مثال: 200"}
+                      />
+                    </div>
+                  </div>
+                )}
+                {!form.allowFull && !form.allowPartial && (
+                  <p className="text-xs text-destructive">اختر خياراً واحداً على الأقل.</p>
+                )}
+                {form.allowPartial && !(Number(form.partialValue) > 0) && (
+                  <p className="text-xs text-destructive">حدّد قيمة الدفع الجزئي.</p>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-2">
               <Label>نوع التفاصيل</Label>
               <Select
                 value={form.detailType}
@@ -425,7 +553,13 @@ function PaymentMethodsPage() {
           <DialogFooter className="gap-2 sm:justify-start">
             <Button
               onClick={() => save.mutate()}
-              disabled={save.isPending || form.name.trim().length < 2}
+              disabled={
+                save.isPending ||
+                form.name.trim().length < 2 ||
+                (form.paymentKind === "online" &&
+                  ((!form.allowFull && !form.allowPartial) ||
+                    (form.allowPartial && !(Number(form.partialValue) > 0))))
+              }
             >
               {save.isPending && <Loader2 className="ml-1 h-4 w-4 animate-spin" />}
               حفظ

@@ -9,6 +9,11 @@
  *
  * Server-only (service-role client). Never import from client code.
  */
+import {
+  normalizePaymentPolicy,
+  paymentPolicyForAgent,
+  type PaymentPolicyFields,
+} from "@/lib/payment-policy";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface VariantRow {
@@ -413,7 +418,7 @@ export function buildStoreKnowledgeBlock(data: MerchantData): string {
 // customer picks — never another method's details or instructions.
 // ---------------------------------------------------------------------------
 
-export interface PaymentMethodRow {
+export interface PaymentMethodRow extends PaymentPolicyFields {
   id: string;
   name: string;
   behavior: "auto" | "manual";
@@ -432,7 +437,7 @@ export async function loadEnabledPaymentMethods(
     const { data } = await admin
       .from("payment_methods")
       .select(
-        "id, name, behavior, detail_type, detail_value, instructions, payment_template",
+        "id, name, behavior, detail_type, detail_value, instructions, payment_template, payment_kind, allow_full_payment, allow_partial_payment, partial_payment_type, partial_payment_value",
       )
       .eq("user_id", userId)
       .eq("enabled", true)
@@ -447,6 +452,7 @@ export async function loadEnabledPaymentMethods(
       detail_value: clean(r.detail_value),
       instructions: String(r.instructions ?? "").trim(),
       payment_template: String(r.payment_template ?? "").trim(),
+      ...normalizePaymentPolicy(r),
     }));
   } catch {
     return [];
@@ -503,6 +509,7 @@ export function buildPaymentMethodsBlock(rows: PaymentMethodRow[]): string {
       if (r.detail_type !== "none" && r.detail_value) {
         lines.push(`${DETAIL_LABEL[r.detail_type] ?? "التفاصيل"}: ${r.detail_value}`);
       }
+      lines.push(...paymentPolicyForAgent(r));
       if (r.instructions) lines.push(`تعليمات هذه الطريقة: ${r.instructions}`);
       return lines.join("\n");
     })
@@ -517,6 +524,8 @@ export function buildPaymentMethodsBlock(rows: PaymentMethodRow[]): string {
     "- After the customer chooses, use ONLY that method's own details and instructions. Never send the details or instructions of any other method.\n" +
     "- If the chosen method has no details and no instructions, just confirm the method normally without inventing payment data.\n" +
     "- Pass the chosen method name verbatim in the create_order tool as payment_method.\n" +
+    "- PAYMENT POLICY IS LAW: for an online method, say exactly what its policy allows (full only / partial only / both) and the exact partial amount or percentage recorded. Never assume, invent, round, or change any amount, percentage or condition, and never tell the customer anything that differs from the recorded policy. If the policy says full payment only, never offer or accept a deposit or partial payment.\n" +
+    "- CASH ON DELIVERY (نوع الدفع: عند الاستلام) is NOT a payment. Choosing it means the customer has NOT paid and will pay when the order is delivered. Never say or imply the order is paid, that the payment was received or confirmed, and never ask for a transfer or proof of payment for it.\n" +
     "- If the chosen method is يدوي (manual), send the order confirmation together with that method's payment details, then stop replying until the merchant confirms the payment. Never say that someone else / a team / a human agent will take over — stay in the same voice.\n" +
     "- If the chosen method is تلقائي (auto), keep the conversation going normally.\n"
   );

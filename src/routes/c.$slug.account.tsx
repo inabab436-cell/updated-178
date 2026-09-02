@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { orderPaymentState } from "@/lib/payment-policy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -320,7 +321,11 @@ function OrderCard({
         <div>
           حالة الدفع:{" "}
           <span className="text-foreground">
-            {order.payment_status === "pending" ? "بانتظار إتمام الدفع" : "مدفوع"}
+            {order.payment_status === "pending"
+              ? "بانتظار إتمام الدفع"
+              : orderPaymentState(order) === "on_delivery"
+                ? "الدفع عند الاستلام"
+                : "مدفوع"}
           </span>
         </div>
         <div>

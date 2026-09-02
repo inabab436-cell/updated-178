@@ -1369,7 +1369,7 @@ export const Route = createFileRoute("/api/chat-ai")({
 
           const conversationOrdersPromise = (async () => {
             const base =
-              "order_number, items, notes, status, payment_status, payment_method, payment_confirmed_at, subtotal_price, discount_amount, shipping_cost, total_price, created_at, stock_deducted";
+              "order_number, items, notes, status, payment_status, payment_method, payment_kind, payment_confirmed_at, subtotal_price, discount_amount, shipping_cost, total_price, created_at, stock_deducted";
             const read = (columns: string) =>
               supabase
                 .from("orders")
@@ -1660,13 +1660,15 @@ export const Route = createFileRoute("/api/chat-ai")({
               const { hasPendingAddition, pendingItemsOf, pendingTotalsOf } = await import(
                 "@/lib/order-pending-additions"
               );
+              const { orderPaymentState } = await import("@/lib/payment-policy");
 
               const lines = rows.map((o) => {
                 const items = Array.isArray(o.items) ? (o.items as Array<Record<string, unknown>>) : [];
                 const first = items.length ? items[0] : null;
                 const productName =
                   first && typeof first.product_name === "string" ? first.product_name : "-";
-                const paid = String(o.payment_status ?? "confirmed") !== "pending";
+                const payState = orderPaymentState(o as any);
+                const paid = payState === "paid";
                 const pendingLines = hasPendingAddition(o as any)
                   ? pendingItemsOf(o as any)
                       .map((it) =>
@@ -1679,16 +1681,23 @@ export const Route = createFileRoute("/api/chat-ai")({
                 return (
                   `Order Number: ${o.order_number ?? "-"} | Product: ${productName} | Status: ${o.status ?? "-"}` +
                   ` | Payment method: ${o.payment_method ?? "-"}` +
-                  ` | Payment: ${paid ? "CONFIRMED (paid)" : "PENDING (not paid yet)"}` +
-                  (o.total_price != null ? ` | Total (paid part): ${o.total_price}` : "") +
+                  ` | Payment: ${
+                    paid
+                      ? "CONFIRMED (paid)"
+                      : payState === "on_delivery"
+                        ? "CASH ON DELIVERY (NOT paid — collected when the order is delivered)"
+                        : "PENDING (not paid yet)"
+                  }` +
+                  (o.total_price != null
+                    ? ` | Total (${payState === "on_delivery" ? "due on delivery" : "paid part"}): ${o.total_price}`
+                    : "") +
                   (pendingLines
                     ? ` | UNPAID ADDITION (waiting for payment confirmation): ${pendingLines} | Addition amount: ${pendingTotalsOf(o as any).total}`
                     : "")
                 );
               });
-              const justConfirmed = rows.filter(
-                (o) => String(o.payment_status ?? "confirmed") !== "pending",
-              );
+              const justConfirmed = rows.filter((o) => orderPaymentState(o as any) === "paid");
+              const cashOnDelivery = rows.filter((o) => orderPaymentState(o as any) === "on_delivery");
               const withPendingAddition = rows.filter((o) => hasPendingAddition(o as any));
               existingOrdersBlock =
                 "\n\nExisting orders in this conversation (live state, always trust this over the chat history):\n" +
@@ -1697,6 +1706,11 @@ export const Route = createFileRoute("/api/chat-ai")({
                   ? "\n\nPAYMENT STATE: the store team has ALREADY confirmed the payment of " +
                     justConfirmed.map((o) => String(o.order_number ?? "-")).join(", ") +
                     ". Treat the ALREADY PAID part of these orders as fully confirmed: never ask the customer to pay it again, never ask for a transfer screenshot for it again, never ask them to confirm it again, and never say that part is still waiting for payment. If they ask, reassure them that the payment arrived and the order is being processed."
+                  : "") +
+                (cashOnDelivery.length
+                  ? "\n\nCASH ON DELIVERY: order(s) " +
+                    cashOnDelivery.map((o) => String(o.order_number ?? "-")).join(", ") +
+                    " are registered and confirmed, but NOTHING has been paid — the customer pays the full amount when the order is delivered. Never say the order is paid, never say a payment arrived or was confirmed, and never ask for a transfer or proof of payment for it."
                   : "") +
                 (withPendingAddition.length
                   ? "\n\nUNPAID ADDITION: " +
@@ -3465,6 +3479,19 @@ export const Route = createFileRoute("/api/chat-ai")({
               };
             }
 
+            // Remember the KIND of the chosen method on the order itself, so a
+            // cash-on-delivery order is never presented as paid anywhere.
+            if (!latestConversationOrder) {
+              try {
+                await supabase
+                  .from("orders")
+                  .update({ payment_kind: chosenMethod?.payment_kind ?? null })
+                  .eq("order_number", orderNumber);
+              } catch {
+                /* payment_kind column not present yet */
+              }
+            }
+
             // Store the real value of the order (products − discount + shipping),
             // so the merchant sees it and every offer check works on numbers.
             if (!latestConversationOrder && (grandTotal > 0 || pricing.subtotal > 0)) {
@@ -3544,9 +3571,9 @@ export const Route = createFileRoute("/api/chat-ai")({
             });
 
 
-            // Automatic payment method → the order is ALREADY paid, so it never
-            // reaches the merchant's "confirm payment" action. Count the offer
-            // beneficiaries here, otherwise the counters never move.
+            // Automatic payment method (e.g. cash on delivery — NOT paid, but it
+            // never reaches the merchant's "confirm payment" action). Count the
+            // offer beneficiaries here, otherwise the counters never move.
             if (!latestConversationOrder && !deductionPlan.requiresPayment && merchant_id) {
               try {
                 const { recordOfferRedemptionsForOrderNumbers } = await import(
@@ -3650,9 +3677,11 @@ export const Route = createFileRoute("/api/chat-ai")({
               orderNumber,
             });
 
+            const { paymentPolicyForAgent } = await import("@/lib/payment-policy");
             const paymentGuidance = chosenMethod
               ? [
                   `Chosen payment method: ${chosenMethod.name}.`,
+                  ...paymentPolicyForAgent(chosenMethod, orderCurrency || undefined),
                   chosenMethod.instructions
                     ? `Follow ONLY these instructions: ${chosenMethod.instructions}`
                     : "",
