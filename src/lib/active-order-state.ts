@@ -10,6 +10,7 @@
  * Pure function — no network, no database, no environment access. Callers pass
  * already-loaded rows (customers row + the conversation's latest order row).
  */
+import { orderPaymentState } from "@/lib/payment-policy";
 
 export interface ActiveOrderStateInput {
   customer?: {
