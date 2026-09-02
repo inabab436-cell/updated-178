@@ -23,6 +23,8 @@ export interface ActiveOrderStateInput {
     status?: string | null;
     payment_method?: string | null;
     payment_status?: string | null;
+    payment_kind?: string | null;
+    payment_method?: string | null;
     items?: unknown;
   } | null;
   /**
@@ -143,11 +145,13 @@ export function buildActiveOrderStateBlock(input: ActiveOrderStateInput): string
     lines.push(
       `رقم الطلب المسجَّل: ${orderNumber} | الحالة: ${clean(input.order?.status) ?? UNKNOWN}`,
     );
-    const paid = String(input.order?.payment_status ?? "confirmed") !== "pending";
+    const payState = orderPaymentState(input.order);
     lines.push(
-      paid
+      payState === "paid"
         ? "حالة الدفع للجزء المسجَّل حالياً: مؤكَّدة — لا تطلب دفع أو إثبات تحويل عن هذا الجزء تحديداً. هذا لا يشمل أي إضافة جديدة: أي قطعة أو منتج يُضاف بعد ذلك جزء جديد غير مدفوع وله مسار دفع كامل مستقل (اختيار طريقة الدفع → تسجيل الإضافة بالأداة → تعليمات الدفع)."
-        : "حالة الدفع: لم يتم تأكيد الدفع بعد.",
+        : payState === "on_delivery"
+          ? "حالة الدفع: الدفع عند الاستلام — العميل لم يدفع بعد، والمبلغ يُحصَّل عند تسليم الطلب. الطلب مسجَّل ومؤكَّد، لكن لا تقل أبداً إنه مدفوع أو إن الدفع تم، ولا تطلب تحويلاً أو إثبات دفع."
+          : "حالة الدفع: لم يتم تأكيد الدفع بعد.",
     );
     lines.push(
       "الطلب أُنشئ بنجاح بهذه البيانات بعد التحقق منها، ومرحلة جمع البيانات انتهت. لا تعيد جمع أي بيان ولا تعيد فتح أي خطوة سابقة. إذا طلب العميل إضافة قطعة أو منتج، افحص الإضافة وحدها من المخزون الحالي، ثم سجّلها فعلياً باستدعاء أداة create_order على نفس رقم الطلب بالكمية الإجمالية الجديدة للسطر وطريقة الدفع التي اختارها العميل؛ لا تعتبر الكمية الموجودة في الطلب جزءاً من المخزون الحالي ولا تنشئ طلباً جديداً.",
