@@ -25,7 +25,6 @@ export interface ActiveOrderStateInput {
     payment_method?: string | null;
     payment_status?: string | null;
     payment_kind?: string | null;
-    payment_method?: string | null;
     items?: unknown;
   } | null;
   /**
